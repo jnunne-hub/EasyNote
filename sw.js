@@ -1,9 +1,11 @@
 const CACHE_NAME = 'easynote-cache-v1';
 const urlsToCache = [
-    '/',
-    '/index.html',
-    '/style.css',
-    '/script.js',
+    './',
+    'index.html',
+    'style.css',
+    'script.js',
+    'manifest.json',
+    'icon-192.png',
     'https://cdn.quilljs.com/1.3.6/quill.min.js',
     'https://cdn.quilljs.com/1.3.6/quill.snow.css',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',
