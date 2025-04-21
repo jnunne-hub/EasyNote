@@ -119,7 +119,26 @@ async function syncFirestoreToLocal() {
         alert("Erreur de synchronisation avec la base de données en ligne. Travail en mode local uniquement.");
     }
 }
-
+async function manualSync() {
+    if (!firestoreReady) {
+        alert("Connexion à la base de données non disponible.");
+        return;
+    }
+    if (!confirm("Recharger toutes les données depuis le Cloud ?\nAttention : Ceci pourrait écraser des modifications locales non sauvegardées dans le Cloud.")) {
+        return;
+    }
+    updateSaveIndicator('Synchro Cloud...', 'fas fa-sync-alt', ['saving']); // Feedback
+    try {
+        await syncFirestoreToLocal(); // Appelle la fonction existante
+        // syncFirestoreToLocal appelle déjà loadFileList à la fin
+        quill.setText('Données synchronisées. Sélectionnez un fichier.'); // Message initial
+        updateSaveIndicator('Synchro OK', 'fas fa-check-circle', ['saved']);
+    } catch (error) {
+         console.error("Erreur pendant la synchronisation manuelle:", error);
+         alert("Erreur lors de la synchronisation depuis le Cloud.");
+         updateSaveIndicator('Erreur Synchro', 'fas fa-cloud-times', ['error']);
+    }
+}
 // Fonction pour sauvegarder toutes les données (objet JS) dans Firestore
 // Utile pour le push initial ou une sauvegarde complète
 async function saveAllDataToFirestore(dataObject) {
