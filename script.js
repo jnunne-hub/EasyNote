@@ -1,7 +1,3 @@
-import { db } from './firebase-config.js';
-import { doc, setDoc, getDoc } from
-  'https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js';
-
 // Enregistrement du Service Worker si disponible
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -288,23 +284,7 @@ async function saveFile() {
         }
     }
 }
-async function backupToCloud(folder, file, delta) {
-  try {
-    const ref = doc(db, 'users', currentUserUid(), 'folders', folder, 'files', file);
-    await setDoc(ref, {
-      content: JSON.stringify(delta),
-      updatedAt: Date.now()
-    });
-    console.info('Backup cloud OK');
-  } catch (err) {
-    console.error('Backup cloud KO', err);
-  }
-}
 
-// Helper pour récupérer l’UID fourni par Auth anonyme
-function currentUserUid() {
-  return firebase.auth().currentUser?.uid || 'guest';
-}
 function printDocument() {
     if (!currentFolder || !currentFile) {
         alert("Sélectionnez ou créez un fichier d'abord.");
