@@ -1,10 +1,9 @@
 const CACHE_NAME = 'easynote-cache-v1';
-const BASE = self.location.pathname.replace(/[^/]+$/, ''); // "/easynote/"
 const urlsToCache = [
-  `${BASE}`,
-  `${BASE}index.html`,
-  `${BASE}style.css`,
-  `${BASE}script.js`,
+    '/',
+    '/index.html',
+    '/style.css',
+    '/script.js',
     'https://cdn.quilljs.com/1.3.6/quill.min.js',
     'https://cdn.quilljs.com/1.3.6/quill.snow.css',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',
