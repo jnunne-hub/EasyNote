@@ -285,44 +285,6 @@ async function saveFile() {
     }
 }
 
-async function saveTxtFile() {
-    if (!currentFolder || !currentFile) return alert("Sélectionnez ou créez un fichier d'abord.");
-    const textContent = quill.getText(); // Récupère le texte brut de l'éditeur
-    const extension = document.getElementById('fileExtension').value;
-    const txtFileName = `${currentFile}-${new Date().toISOString().slice(0,10)}.${extension}`;
-
-    const mimeTypes = {
-        'txt': 'text/plain',
-        'css': 'text/css',
-        'js': 'text/javascript',
-        'html': 'text/html',
-        'md': 'text/markdown'
-    };
-    const mimeType = mimeTypes[extension] || 'text/plain';
-
-    try {
-        if (window.showSaveFilePicker) {
-            const handle = await window.showSaveFilePicker({
-                suggestedName: txtFileName,
-                types: [{
-                    description: `${extension.toUpperCase()} Files`,
-                    accept: { [mimeType]: [`.${extension}`] }
-                }]
-            });
-            const writable = await handle.createWritable();
-            await writable.write(new Blob([textContent], { type: mimeType }));
-            await writable.close();
-        } else {
-            const link = document.createElement('a');
-            link.download = txtFileName;
-            link.href = URL.createObjectURL(new Blob([textContent], { type: mimeType }));
-            link.click();
-        }
-    } catch (error) {
-        if (error.name !== 'AbortError') alert(`Erreur lors de la sauvegarde ${extension.toUpperCase()} : ${error.message}`);
-    }
-}
-
 function printDocument() {
     if (!currentFolder || !currentFile) {
         alert("Sélectionnez ou créez un fichier d'abord.");
@@ -490,62 +452,28 @@ function openFile(event) {
     reader.readAsText(file);
 }
 
-// Fonction pour calculer la taille totale du localStorage en octets et le nombre de caractères
-function getLocalStorageStats() {
-    let totalSize = 0; // Taille en octets
-    let totalChars = 0; // Nombre de caractères
+// Limite typique de localStorage (5 Mo)
+const STORAGE_LIMIT_MB = 5;
+const WARNING_THRESHOLD = 0.9; // 90% de la limite (4.5 Mo)
 
-    for (let key in localStorage) {
-        if (localStorage.hasOwnProperty(key)) {
-            // Taille en octets (UTF-16 : 2 octets par caractère)
-            totalSize += ((localStorage[key].length + key.length) * 2);
-            // Nombre de caractères (longueur de la clé + valeur)
-            totalChars += localStorage[key].length + key.length;
-        }
-    }
-    return { sizeInBytes: totalSize, charCount: totalChars };
-}
-
-// Fonction pour calculer la taille totale du localStorage en octets
-function getLocalStorageSize() {
-    let totalSize = 0;
-    for (let key in localStorage) {
-        if (localStorage.hasOwnProperty(key)) {
-            totalSize += ((localStorage[key].length + key.length) * 2); // Chaque caractère = 2 octets en UTF-16
-        }
-    }
-    return totalSize;
-}
-
-// Constante pour la limite maximale (5 Mo en octets)
-const LOCAL_STORAGE_LIMIT = 5 * 1024 * 1024; // 5 242 880 octets
-const WARNING_THRESHOLD = LOCAL_STORAGE_LIMIT * 0.9; // 90% de la limite
-let hasWarned = false;
-
-// Mettre à jour l'indicateur de sauvegarde
 function updateSaveIndicator(text, iconClass, classes) {
     const saveIndicator = document.getElementById('saveIndicator');
     const saveText = document.getElementById('saveText');
     const saveIcon = document.getElementById('saveIcon');
 
-    // Calculer la taille et le nombre de caractères
-    const stats = getLocalStorageStats();
-    const sizeInBytes = stats.sizeInBytes;
-    const charCount = stats.charCount;
-    const percentage = (sizeInBytes / LOCAL_STORAGE_LIMIT) * 100;
+    // Calculer la taille de localStorage
+    const { charCount, sizeInMB } = getLocalStorageCharCount();
 
-    // Mettre à jour le texte avec le nombre de caractères et la taille
-    saveText.textContent = `${text} (${charCount} chars, ${(sizeInBytes / 1024).toFixed(1)} Ko / ${(LOCAL_STORAGE_LIMIT / 1024 / 1024).toFixed(1)} Mo)`;
+    // Mettre à jour le texte avec le nombre de caractères
+    saveText.textContent = `${text} (${charCount} car.)`;
     saveIcon.className = iconClass;
     saveIndicator.classList.remove('saving', 'saved');
     classes.forEach(cls => saveIndicator.classList.add(cls));
 
-    // Vérifier si on atteint 90% et alerter
-    if (sizeInBytes >= WARNING_THRESHOLD && !hasWarned) {
-        alert(`Attention : le localStorage est utilisé à ${percentage.toFixed(1)}% de sa capacité maximale (${(LOCAL_STORAGE_LIMIT / 1024 / 1024).toFixed(1)} Mo). Pensez à sauvegarder vos données et à vider le cache pour libérer de l'espace.`);
-        hasWarned = true;
-    } else if (sizeInBytes < WARNING_THRESHOLD) {
-        hasWarned = false;
+    // Vérifier si on approche de la limite
+    if (sizeInMB >= STORAGE_LIMIT_MB * WARNING_THRESHOLD) {
+        const percentage = ((sizeInMB / STORAGE_LIMIT_MB) * 100).toFixed(1);
+        alert(`Attention : localStorage est utilisé à ${percentage}% (${sizeInMB.toFixed(2)} Mo sur ${STORAGE_LIMIT_MB} Mo). Pensez à vider le cache ou à sauvegarder vos données en JSON pour libérer de l'espace.`);
     }
 }
 
@@ -575,8 +503,14 @@ quill.on('text-change', () => {
             if (fileIndex !== -1) {
                 const delta = quill.getContents();
                 folder.files[fileIndex].content = JSON.stringify(delta);
-                localStorage.setItem('data', JSON.stringify(data));
-                updateSaveIndicator('Sauv.', 'fas fa-check', ['saved']);
+                try {
+                    localStorage.setItem('data', JSON.stringify(data));
+                    updateSaveIndicator('Sauvegardé', 'fas fa-check', ['saved']);
+                } catch (error) {
+                    if (error.name === 'QuotaExceededError') {
+                        alert("Erreur : La limite de stockage de localStorage est atteinte. Essayez de vider le cache ou de supprimer des fichiers.");
+                    }
+                }
             }
         }
     }, 500);
@@ -664,6 +598,19 @@ function toggleTheme() {
         localStorage.setItem('theme', 'light');
     }
 }
+
+function getLocalStorageCharCount() {
+    let totalBytes = 0;
+    for (let key in localStorage) {
+        if (localStorage.hasOwnProperty(key)) {
+            totalBytes += ((localStorage[key].length + key.length) * 2); // Taille en octets (UTF-16)
+        }
+    }
+    const charCount = totalBytes / 2; // 1 caractère = 2 octets en UTF-16
+    const sizeInMB = totalBytes / (1024 * 1024); // Taille en Mo
+    return { charCount: Math.round(charCount), sizeInMB: sizeInMB };
+}
+
 
 // Vider le cache
 async function clearCache() {
