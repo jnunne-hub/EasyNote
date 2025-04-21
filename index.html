@@ -51,25 +51,13 @@
             <button class="save-json-btn" onclick="saveJsonFile()">
                 <i class="fas fa-download"></i> Sauvegarder JSON
             </button>
-            <div class="save-text-container">
-                <button class="save-txt-btn" onclick="saveTxtFile()">
-                    <i class="fas fa-file-alt"></i> Sauvegarder
-                </button>
-                <select id="fileExtension">
-                    <option value="txt">TXT</option>
-                    <option value="css">CSS</option>
-                    <option value="js">JS</option>
-                    <option value="html">HTML</option>
-                    <option value="md">MD</option>
-                </select>
-            </div>
-    <button class="clear-cache-btn" onclick="clearCache()">
-        <i class="fas fa-trash-alt"></i> Vider le cache
-    </button>
-    <button class="clear-localstorage-btn" onclick="clearLocalStorage()">
-        <i class="fas fa-eraser"></i> Effacer les données
-    </button>
-</div>
+            <button class="clear-cache-btn" onclick="clearCache()">
+                <i class="fas fa-trash-alt"></i> Vider le cache
+            </button>
+            <button class="clear-localstorage-btn" onclick="clearLocalStorage()">
+                <i class="fas fa-eraser"></i> Effacer les données
+            </button>
+        </div>
     </div>
 
     <div class="main-container">
@@ -79,14 +67,13 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <h1 class="app-title">EasyNote</h1>
-                
-                <button class="theme-toggle" onclick="toggleTheme()" title="Basculer le thème">
-                    <i class="fas fa-moon" id="themeIcon"></i>
-                </button>
                 <span class="save-indicator" id="saveIndicator">
                     <i id="saveIcon"></i>
                     <span id="saveText"></span>
                 </span>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Basculer le thème">
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
             </div>
             <div class="editor-container">
                 <div class="editor-wrapper" id="editorWrapper">
