@@ -486,19 +486,138 @@ function newFile() {
 }
 
 // Charger un fichier
-function loadFile(folderName, fileName) {
-    const data = JSON.parse(localStorage.getItem('data')) || { folders: [] };
-    const folder = data.folders.find(f => f.name === folderName);
-    if (folder) {
-        const file = folder.files.find(f => f.name === fileName);
-        if (file) {
-            currentFolder = folderName;
-            currentFile = fileName;
-            localStorage.setItem('lastFile', JSON.stringify({ folder: folderName, file: fileName }));
-            quill.setContents(JSON.parse(file.content || '[]'));
-            loadFileList();
-            updateSaveIndicator('Prêt', 'fas fa-check', ['saved']);
+// MODIFIER : loadFile pour lire depuis Firestore en priorité
+
+async function loadFile(folderName, fileName) {
+    console.log(`Chargement du fichier : ${folderName}/${fileName}`);
+    updateSaveIndicator('Chargement...', 'fas fa-spinner', ['saving']); // Indicateur de chargement
+
+    // Mettre à jour immédiatement l'état pour la sélection visuelle
+    currentFolder = folderName;
+    currentFile = fileName;
+    localStorage.setItem('lastFile', JSON.stringify({ folder: folderName, file: fileName }));
+    loadFileList(); // Met à jour l'UI pour montrer la sélection active
+
+    if (!firestoreReady) {
+        // --- Fallback vers LocalStorage si Firestore n'est pas prêt ---
+        console.warn("Firestore non prêt. Tentative de chargement depuis LocalStorage.");
+        const data = JSON.parse(localStorage.getItem('data')) || { folders: [] };
+        const folder = data.folders.find(f => f.name === folderName);
+        if (folder) {
+            const file = folder.files.find(f => f.name === fileName);
+            if (file && typeof file.content === 'string') { // Vérifier si content existe et est une string
+                 try {
+                     // Vérifier si le contenu est un JSON valide avant de parser
+                     const delta = JSON.parse(file.content || '[]') ;
+                     quill.setContents(delta);
+                     updateSaveIndicator('Local', 'fas fa-hdd', ['saved']); // Indique chargé depuis local
+                     console.log("Chargé depuis LocalStorage (fallback).");
+                 } catch (e) {
+                      console.error("Erreur lors du parsing du contenu local:", e);
+                      quill.setText(`Erreur: Impossible de lire le contenu local du fichier ${fileName}.`);
+                      updateSaveIndicator('Erreur Locale', 'fas fa-exclamation-triangle', ['error']);
+                 }
+
+            } else {
+                console.warn(`Fichier ${fileName} ou son contenu non trouvé dans LocalStorage.`);
+                quill.setText(`Fichier ${fileName} non trouvé localement.`);
+                updateSaveIndicator('Non trouvé', 'fas fa-question-circle', ['error']);
+            }
+        } else {
+            console.warn(`Dossier ${folderName} non trouvé dans LocalStorage.`);
+            quill.setText(`Dossier ${folderName} non trouvé localement.`);
+            updateSaveIndicator('Non trouvé', 'fas fa-question-circle', ['error']);
         }
+        return; // Sortir après le fallback local
+    }
+
+    // --- Chargement principal depuis Firestore ---
+    try {
+        const folderRef = db.collection(FOLDERS_COLLECTION).doc(folderName);
+        const folderDoc = await folderRef.get({ source: 'cache' }); // Essayer le cache d'abord pour la vitesse
+
+        let fileData = null;
+        let sourceMsg = "(cache)";
+
+        if (folderDoc.exists) {
+             const files = folderDoc.data().files || [];
+             fileData = files.find(f => f.name === fileName);
+        }
+
+        // Si non trouvé dans le cache ou si on veut vérifier le serveur
+        if (!fileData) {
+            console.log("Non trouvé dans le cache ou cache désactivé, vérification serveur...");
+             const serverFolderDoc = await folderRef.get({ source: 'server' });
+             sourceMsg = "(serveur)";
+             if (serverFolderDoc.exists) {
+                  const serverFiles = serverFolderDoc.data().files || [];
+                  fileData = serverFiles.find(f => f.name === fileName);
+             } else {
+                  // Le dossier n'existe plus sur le serveur
+                  console.error(`Erreur Firestore: Le dossier ${folderName} n'existe pas sur le serveur.`);
+                  quill.setText(`Erreur : Le dossier "${folderName}" n'existe plus.`);
+                  updateSaveIndicator('Erreur Cloud', 'fas fa-cloud-times', ['error']);
+                  // Effacer localement aussi ? Pourrait être dangereux sans confirmation.
+                   currentFolder = null; // Réinitialiser l'état
+                   currentFile = null;
+                   localStorage.removeItem('lastFile');
+                   // Idéalement, supprimer le dossier du localStorage ici aussi.
+                   loadFileList(); // Mettre à jour la liste
+                  return;
+             }
+        }
+
+
+        if (fileData && typeof fileData.content === 'string') {
+            console.log(`Fichier trouvé dans Firestore ${sourceMsg}. Chargement du contenu.`);
+            try {
+                const delta = JSON.parse(fileData.content || '[]'); // Assurer un fallback si content est vide
+                quill.setContents(delta);
+                updateSaveIndicator('Prêt', 'fas fa-check', ['saved']); // Indique chargé et prêt
+                console.log(`Contenu de ${folderName}/${fileName} chargé depuis Firestore ${sourceMsg}.`);
+
+                // Optionnel : Mettre à jour LocalStorage avec la version de Firestore ?
+                // Cela assure que le fallback local est plus à jour, mais augmente les écritures LS.
+                /*
+                const localData = JSON.parse(localStorage.getItem('data')) || { folders: [] };
+                const localFolder = localData.folders.find(f => f.name === folderName);
+                if (localFolder) {
+                    const localFileIndex = localFolder.files.findIndex(f => f.name === fileName);
+                    if (localFileIndex !== -1) {
+                        localFolder.files[localFileIndex].content = fileData.content;
+                    } else { // Si le fichier n'existait pas localement
+                        localFolder.files.push({ name: fileName, content: fileData.content });
+                    }
+                    localStorage.setItem('data', JSON.stringify(localData));
+                    console.log("Cache LocalStorage mis à jour avec la version Firestore.");
+                }
+                */
+
+            } catch (e) {
+                 console.error("Erreur lors du parsing du contenu Firestore:", fileData.content, e);
+                 quill.setText(`Erreur: Impossible de lire le contenu du fichier ${fileName} depuis la base de données.`);
+                 updateSaveIndicator('Erreur Contenu', 'fas fa-file-excel', ['error']);
+            }
+
+        } else {
+            // Fichier non trouvé dans le dossier sur Firestore
+            console.error(`Erreur Firestore: Fichier ${fileName} non trouvé dans le dossier ${folderName}.`);
+            quill.setText(`Erreur : Le fichier "${fileName}" n'existe plus dans le dossier "${folderName}".`);
+            updateSaveIndicator('Erreur Cloud', 'fas fa-cloud-times', ['error']);
+             // Effacer localement aussi ?
+             currentFile = null; // Réinitialiser l'état du fichier
+             localStorage.removeItem('lastFile');
+             // Idéalement, supprimer le fichier du localStorage ici aussi.
+             loadFileList(); // Mettre à jour la liste
+        }
+
+    } catch (error) {
+        console.error("Erreur lors du chargement depuis Firestore:", error);
+        // Gérer les erreurs réseau potentielles ou autres problèmes Firestore
+        quill.setText(`Erreur de connexion lors du chargement de ${fileName}. Vérifiez votre connexion.`);
+        updateSaveIndicator('Erreur Réseau', 'fas fa-wifi', ['error']);
+        // Tenter un fallback local ici aussi pourrait être une option
+        // mais peut afficher des données obsolètes.
     }
 }
 
